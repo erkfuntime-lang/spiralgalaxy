@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galaxy Atlas — Procedural Spiral Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-void:#050309;
+    --bg-panel: rgba(12,9,19,0.72);
+    --ink:#ece4d3;
+    --ink-muted:#9a8fa3;
+    --gold:#c9a463;
+    --gold-dim: rgba(201,164,99,0.28);
+    --blue:#8ab6ff;
+    --rose:#d98a7a;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--bg-void);
+    overflow:hidden;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+  }
+  #canvas-wrap{position:fixed; inset:0;}
+  canvas{display:block;}
+
+  .plate{
+    position:fixed;
+    background:var(--bg-panel);
+    border:1px solid var(--gold-dim);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  #panel{
+    top:20px; left:20px; width:296px;
+    padding:22px 22px 18px;
+    max-height: calc(100vh - 40px);
+    overflow-y:auto;
+  }
+  #panel::-webkit-scrollbar{width:6px;}
+  #panel::-webkit-scrollbar-thumb{background:var(--gold-dim); border-radius:3px;}
+
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--gold); opacity:0.85; margin:0 0 2px;
+  }
+  h1{
+    font-family:'Cormorant Garamond', serif;
+    font-weight:600; font-style:italic;
+    font-size:27px; margin:0 0 16px; letter-spacing:0.01em;
+    color:var(--ink);
+    border-bottom:1px solid var(--gold-dim);
+    padding-bottom:14px;
+  }
+
+  .field{margin-bottom:15px;}
+  .field-label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:11.5px; color:var(--ink-muted); margin-bottom:6px;
+    letter-spacing:0.02em;
+  }
+  .field-label span.val{
+    font-family:'IBM Plex Mono',monospace; color:var(--gold); font-size:11px;
+  }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:2px; background:var(--gold-dim);
+    outline:none; margin:0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:11px; height:11px; border-radius:50%;
+    background:var(--gold); border:1px solid rgba(0,0,0,0.4);
+    cursor:pointer; margin-top:-4.5px;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:11px; height:11px; border-radius:50%;
+    background:var(--gold); border:none; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px; background:var(--gold-dim);}
+
+  .seed-row{display:flex; gap:6px;}
+  #seedInput{
+    flex:1; min-width:0;
+    background:rgba(255,255,255,0.03);
+    border:1px solid var(--gold-dim);
+    color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12px;
+    padding:7px 9px; border-radius:2px;
+  }
+  #seedInput:focus{outline:none; border-color:var(--gold);}
+
+  button{
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:500;
+    background:transparent; color:var(--ink);
+    border:1px solid var(--gold-dim);
+    padding:7px 12px; border-radius:2px; cursor:pointer;
+    letter-spacing:0.02em;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  button:hover{border-color:var(--gold); color:var(--gold); background:rgba(201,164,99,0.06);}
+  button.dice{padding:7px 11px; flex:0 0 auto;}
+  button.primary{
+    width:100%; margin-top:4px; padding:9px;
+    border-color:var(--gold); color:var(--gold);
+  }
+  button.primary:hover{background:rgba(201,164,99,0.12);}
+
+  .palette-row{display:flex; gap:6px; margin-top:2px;}
+  .palette-row button{flex:1; font-size:10.5px; padding:8px 4px;}
+  .palette-row button.active{background:rgba(201,164,99,0.16); border-color:var(--gold); color:var(--gold);}
+
+  .toggle-row{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11.5px; color:var(--ink-muted); margin-top:16px; margin-bottom:2px;
+  }
+  .switch{
+    position:relative; width:34px; height:18px;
+    border:1px solid var(--gold-dim); border-radius:10px; cursor:pointer;
+    background:rgba(255,255,255,0.03);
+  }
+  .switch .knob{
+    position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%;
+    background:var(--ink-muted); transition:transform 0.18s, background 0.18s;
+  }
+  .switch.on{border-color:var(--gold);}
+  .switch.on .knob{transform:translateX(15px); background:var(--gold);}
+
+  hr.hairline{border:none; border-top:1px solid var(--gold-dim); margin:16px 0 14px;}
+
+  #hud{
+    bottom:20px; left:20px;
+    padding:11px 16px;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    color:var(--ink-muted); letter-spacing:0.03em;
+    display:flex; gap:18px;
+  }
+  #hud b{color:var(--gold); font-weight:500;}
+
+  #hint{
+    bottom:20px; right:20px;
+    padding:9px 14px;
+    font-family:'IBM Plex Mono',monospace; font-size:10px;
+    color:var(--ink-muted); letter-spacing:0.03em;
+  }
+
+  #loading{
+    position:fixed; inset:0; background:var(--bg-void);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Cormorant Garamond',serif; font-style:italic; font-size:18px;
+    color:var(--gold); letter-spacing:0.04em; z-index:50;
+    transition:opacity 0.5s;
+  }
+
+  @media (max-width: 640px){
+    #panel{width:calc(100% - 40px); max-height:60vh;}
+    #hint{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">assembling stellar field…</div>
+<div id="canvas-wrap"></div>
+
+<div id="panel" class="plate">
+  <p class="eyebrow">Galaxy Atlas · Plate No. 1</p>
+  <h1>Spiral Generator</h1>
+
+  <div class="field">
+    <div class="field-label">Seed</div>
+    <div class="seed-row">
+      <input id="seedInput" type="text" value="384920" spellcheck="false">
+      <button class="dice" id="diceBtn" title="Random seed">⟲</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="field-label"><span>Spiral arms</span><span class="val" id="armsVal">3</span></div>
+    <input type="range" id="arms" min="2" max="5" step="1" value="3">
+  </div>
+
+  <div class="field">
+    <div class="field-label"><span>Arm tightness</span><span class="val" id="tightVal">0.28</span></div>
+    <input type="range" id="tightness" min="0.15" max="0.45" step="0.01" value="0.28">
+  </div>
+
+  <div class="field">
+    <div class="field-label"><span>Bulge size</span><span class="val" id="bulgeVal">1.0</span></div>
+    <input type="range" id="bulge" min="0.4" max="2.0" step="0.05" value="1.0">
+  </div>
+
+  <div class="field">
+    <div class="field-label"><span>Disk radius</span><span class="val" id="radiusVal">11</span></div>
+    <input type="range" id="radius" min="6" max="16" step="0.5" value="11">
+  </div>
+
+  <div class="field">
+    <div class="field-label"><span>Star count</span><span class="val" id="countVal">9000</span></div>
+    <input type="range" id="count" min="3000" max="18000" step="500" value="9000">
+  </div>
+
+  <div class="field">
+    <div class="field-label">Stellar population</div>
+    <div class="palette-row" id="paletteRow">
+      <button data-p="starburst" class="active">Starburst</button>
+      <button data-p="mature">Mature</button>
+      <button data-p="agn">Active core</button>
+    </div>
+  </div>
+
+  <button class="primary" id="regenBtn">Regenerate galaxy</button>
+
+  <div class="toggle-row">
+    <span>Auto-rotate</span>
+    <div class="switch on" id="rotateToggle"><div class="knob"></div></div>
+  </div>
+
+  <hr class="hairline">
+  <p class="eyebrow" style="margin-bottom:0;">Drag to orbit · scroll to zoom</p>
+</div>
+
+<div id="hud" class="plate">
+  <span>CAT&nbsp;<b id="hudSeed">384920</b></span>
+  <span>N★&nbsp;<b id="hudStars">9,000</b></span>
+  <span>ARMS&nbsp;<b id="hudArms">3</b></span>
+</div>
+
+<div id="hint" class="plate">rendered live · three.js</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+
+// ---------- seeded RNG ----------
+function xmur3(str){
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++){
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function(){
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return h >>> 0;
+  };
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function makeRng(seedStr){
+  const seedFn = xmur3(String(seedStr));
+  return mulberry32(seedFn());
+}
+function gaussian(rng, mean, std){
+  let u = 1 - rng(), v = rng();
+  let z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  return mean + std * z;
+}
+
+// ---------- stellar color ramp (approx blackbody, warm->hot) ----------
+const STAR_COLORS = [
+  [0.58, 0.68, 1.00], // 0 blue giant
+  [0.75, 0.82, 1.00], // 1 blue-white
+  [1.00, 1.00, 0.96], // 2 white
+  [1.00, 0.93, 0.78], // 3 yellow-white
+  [1.00, 0.82, 0.55], // 4 orange
+  [1.00, 0.60, 0.40]  // 5 red dwarf/giant
+];
+const STAR_SIZES = [3.1, 2.4, 1.9, 1.6, 1.35, 1.1];
+
+const PALETTES = {
+  starburst: { shift: -1.3, bulgeShift: -0.4, nebula: 1.3, nebColor: [0.55,0.75,1.0], coreBoost: 1.0 },
+  mature:    { shift:  1.6, bulgeShift:  1.0, nebula: 0.35, nebColor: [0.85,0.7,0.6], coreBoost: 1.0 },
+  agn:       { shift: -0.9, bulgeShift: -0.9, nebula: 0.9,  nebColor: [0.95,0.55,0.85], coreBoost: 2.4 }
+};
+
+function pickColor(rng, closeness, shift){
+  let base = (1 - closeness) * 5 + shift + gaussian(rng, 0, 1.05);
+  let idx = Math.round(Math.max(0, Math.min(5, base)));
+  const c = STAR_COLORS[idx];
+  const jitter = 0.04;
+  return [
+    Math.min(1, Math.max(0, c[0] + gaussian(rng,0,jitter))),
+    Math.min(1, Math.max(0, c[1] + gaussian(rng,0,jitter))),
+    Math.min(1, Math.max(0, c[2] + gaussian(rng,0,jitter))),
+    STAR_SIZES[idx]
+  ];
+}
+
+// ---------- procedural textures ----------
+function makeStarTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.15,'rgba(255,255,255,0.95)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+function makeDustTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0.0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.25)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+function makeNebulaTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0.0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.35,'rgba(255,255,255,0.22)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+
+const starTex = makeStarTexture();
+const dustTex = makeDustTexture();
+const nebTex = makeNebulaTexture();
+
+// ---------- shader material for main starfield ----------
+const starVert = `
+attribute float aSize;
+attribute float aPhase;
+varying vec3 vColor;
+varying float vPhase;
+void main(){
+  vColor = color;
+  vPhase = aPhase;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = aSize * (280.0 / -mv.z);
+  gl_Position = projectionMatrix * mv;
+}`;
+const starFrag = `
+uniform sampler2D uTex;
+uniform float uTime;
+varying vec3 vColor;
+varying float vPhase;
+void main(){
+  vec4 tex = texture2D(uTex, gl_PointCoord);
+  float tw = 0.8 + 0.2 * sin(uTime * 1.4 + vPhase);
+  gl_FragColor = vec4(vColor * tw, 1.0) * tex;
+}`;
+
+function makeStarMaterial(tex){
+  return new THREE.ShaderMaterial({
+    uniforms: { uTex: { value: tex }, uTime: { value: 0 } },
+    vertexShader: starVert,
+    fragmentShader: starFrag,
+    vertexColors: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true
+  });
+}
+
+// ---------- galaxy generation ----------
+function buildGalaxy(params){
+  const rng = makeRng(params.seed);
+  const pal = PALETTES[params.palette];
+  const group = new THREE.Group();
+
+  const total = params.count;
+  const bulgeN = Math.floor(total * 0.22);
+  const haloN  = Math.floor(total * 0.06);
+  const dustN  = Math.floor(total * 0.08);
+  const armN   = total - bulgeN - haloN - dustN;
+
+  const R = params.radius;
+  const b = params.tightness;
+  const maxTheta = 3.05 * Math.PI;
+  const a = R / Math.exp(b * maxTheta);
+  const armCount = params.arms;
+  const armOffset = 2 * Math.PI / armCount;
+
+  // --- arm + bulge combined main starfield ---
+  const mainN = armN + bulgeN;
+  const pos = new Float32Array(mainN * 3);
+  const col = new Float32Array(mainN * 3);
+  const siz = new Float32Array(mainN);
+  const phs = new Float32Array(mainN);
+  let p = 0;
+
+  // bulge
+  const bulgeR = R * 0.16 * params.bulge;
+  for (let i = 0; i < bulgeN; i++){
+    const x = gaussian(rng, 0, bulgeR);
+    const z = gaussian(rng, 0, bulgeR);
+    const y = gaussian(rng, 0, bulgeR * 0.62);
+    const dist = Math.sqrt(x*x + y*y + z*z) / (bulgeR * 1.6);
+    const closeness = Math.max(0, 1 - dist) * 0.55; // bulge stars skew warm, not blue
+    const [cr,cg,cb,sz] = pickColor(rng, closeness, pal.bulgeShift);
+    const idx = p*3;
+    pos[idx]=x; pos[idx+1]=y; pos[idx+2]=z;
+    const boost = 1 + (1 - Math.min(1,dist)) * (pal.coreBoost - 1);
+    col[idx]=cr*boost; col[idx+1]=cg*boost; col[idx+2]=cb*boost;
+    siz[p] = sz * (1 + (1-Math.min(1,dist))*0.8);
+    phs[p] = rng() * Math.PI * 2;
+    p++;
+  }
+
+  // spiral arms
+  for (let i = 0; i < armN; i++){
+    const arm = i % armCount;
+    const theta = Math.pow(rng(), 0.85) * maxTheta;
+    let r = a * Math.exp(b * theta);
+    const angle = theta + arm * armOffset;
+
+    const scatter = (0.045 * r + 0.35);
+    const rPerturb = gaussian(rng, 0, scatter);
+    const aPerturb = gaussian(rng, 0, scatter / (r + 1.5));
+    const rr = Math.max(0.1, r + rPerturb);
+    const aa = angle + aPerturb;
+
+    const thickness = (0.55 + 0.9 * (1 - Math.min(1, r / R))) * 0.32;
+    const y = gaussian(rng, 0, thickness);
+
+    const x = rr * Math.cos(aa);
+    const z = rr * Math.sin(aa);
+
+    const closeness = Math.max(0, 1 - Math.abs(rPerturb) / (scatter * 2.2));
+    const [cr,cg,cb,sz] = pickColor(rng, closeness, pal.shift);
+
+    const idx = p*3;
+    pos[idx]=x; pos[idx+1]=y; pos[idx+2]=z;
+    col[idx]=cr; col[idx+1]=cg; col[idx+2]=cb;
+    siz[p] = sz;
+    phs[p] = rng() * Math.PI * 2;
+    p++;
+  }
+
+  const mainGeo = new THREE.BufferGeometry();
+  mainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  mainGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  mainGeo.setAttribute('aSize', new THREE.BufferAttribute(siz, 1));
+  mainGeo.setAttribute('aPhase', new THREE.BufferAttribute(phs, 1));
+  const mainMat = makeStarMaterial(starTex);
+  const mainPoints = new THREE.Points(mainGeo, mainMat);
+  mainPoints.userData.isStarLayer = true;
+  group.add(mainPoints);
+
+  // --- dust lanes (inner edge of arms, dim, warm-dark) ---
+  const dPos = new Float32Array(dustN * 3);
+  const dCol = new Float32Array(dustN * 3);
+  const dSiz = new Float32Array(dustN);
+  for (let i = 0; i < dustN; i++){
+    const arm = i % armCount;
+    const theta = Math.pow(rng(), 0.85) * maxTheta;
+    let r = a * Math.exp(b * theta) * 0.94;
+    const angle = theta + arm * armOffset + 0.05;
+    const scatter = 0.05 * r + 0.4;
+    r += gaussian(rng, 0, scatter * 0.6);
+    const y = gaussian(rng, 0, 0.18);
+    const x = r * Math.cos(angle);
+    const z = r * Math.sin(angle);
+    const idx = i*3;
+    dPos[idx]=x; dPos[idx+1]=y; dPos[idx+2]=z;
+    const warm = 0.5 + rng()*0.2;
+    dCol[idx]=warm*0.55; dCol[idx+1]=warm*0.32; dCol[idx+2]=warm*0.26;
+    dSiz[i] = 5 + rng()*4;
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dPos,3));
+  dustGeo.setAttribute('color', new THREE.BufferAttribute(dCol,3));
+  const dustMat = new THREE.PointsMaterial({
+    size: 1, map: dustTex, vertexColors: true, transparent: true,
+    opacity: 0.5, depthWrite: false, blending: THREE.NormalBlending, sizeAttenuation: true
+  });
+  // encode per-point size via geometry scale trick: use average size through material.size and rely on distance falloff
+  dustMat.size = 0.9;
+  const dustPoints = new THREE.Points(dustGeo, dustMat);
+  group.add(dustPoints);
+
+  // --- halo (sparse spherical, old faint stars) ---
+  const hPos = new Float32Array(haloN * 3);
+  const hCol = new Float32Array(haloN * 3);
+  for (let i = 0; i < haloN; i++){
+    const rr = R * (0.5 + rng() * 1.3);
+    const u = rng(), v = rng();
+    const theta2 = 2*Math.PI*u, phi = Math.acos(2*v-1);
+    const x = rr*Math.sin(phi)*Math.cos(theta2);
+    const y = rr*Math.cos(phi)*0.6;
+    const z = rr*Math.sin(phi)*Math.sin(theta2);
+    const idx=i*3;
+    hPos[idx]=x; hPos[idx+1]=y; hPos[idx+2]=z;
+    const c = STAR_COLORS[3 + (rng()>0.7?1:0)];
+    hCol[idx]=c[0]*0.6; hCol[idx+1]=c[1]*0.6; hCol[idx+2]=c[2]*0.6;
+  }
+  const haloGeo = new THREE.BufferGeometry();
+  haloGeo.setAttribute('position', new THREE.BufferAttribute(hPos,3));
+  haloGeo.setAttribute('color', new THREE.BufferAttribute(hCol,3));
+  const haloMat = new THREE.PointsMaterial({
+    size: 1.1, map: starTex, vertexColors: true, transparent: true,
+    opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+  });
+  const haloPoints = new THREE.Points(haloGeo, haloMat);
+  group.add(haloPoints);
+
+  // --- nebula sprites ---
+  const nebCount = Math.round((4 + rng()*4) * pal.nebula);
+  for (let i = 0; i < nebCount; i++){
+    const theta = rng() * maxTheta;
+    const r = a * Math.exp(b * theta) * (0.4 + rng()*0.7);
+    const arm = Math.floor(rng()*armCount);
+    const angle = theta + arm*armOffset;
+    const x = r*Math.cos(angle), z = r*Math.sin(angle), y = gaussian(rng,0,0.3);
+    const mat = new THREE.SpriteMaterial({
+      map: nebTex, color: new THREE.Color(pal.nebColor[0], pal.nebColor[1], pal.nebColor[2]),
+      transparent: true, opacity: 0.10 + rng()*0.08, blending: THREE.AdditiveBlending, depthWrite:false
+    });
+    const spr = new THREE.Sprite(mat);
+    const s = R * (0.18 + rng()*0.22);
+    spr.scale.set(s, s, 1);
+    spr.position.set(x, y, z);
+    group.add(spr);
+  }
+
+  // AGN core glow
+  if (params.palette === 'agn'){
+    const glowMat = new THREE.SpriteMaterial({
+      map: nebTex, color: new THREE.Color(1.0, 0.7, 0.85),
+      transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite:false
+    });
+    const glow = new THREE.Sprite(glowMat);
+    const s = R * 0.22;
+    glow.scale.set(s, s, 1);
+    group.add(glow);
+  }
+
+  return { group, mainMat };
+}
+
+// ---------- scene setup ----------
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth/window.innerHeight, 0.1, 3000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+wrap.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 3;
+controls.maxDistance = 90;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+
+// background gradient sphere
+const bgGeo = new THREE.SphereGeometry(1200, 32, 32);
+const bgMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  depthWrite: false,
+  uniforms: {
+    top: { value: new THREE.Color(0x140f24) },
+    bottom: { value: new THREE.Color(0x030209) }
+  },
+  vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `varying vec3 vPos; uniform vec3 top; uniform vec3 bottom;
+    void main(){ float h = normalize(vPos).y * 0.5 + 0.5; gl_FragColor = vec4(mix(bottom, top, h), 1.0); }`
+});
+scene.add(new THREE.Mesh(bgGeo, bgMat));
+
+// distant field stars
+(function(){
+  const N = 1800;
+  const pos = new Float32Array(N*3);
+  const col = new Float32Array(N*3);
+  const rng = makeRng('field-stars-fixed');
+  for (let i=0;i<N;i++){
+    const rr = 200 + rng()*700;
+    const u=rng(), v=rng();
+    const th=2*Math.PI*u, ph=Math.acos(2*v-1);
+    const idx=i*3;
+    pos[idx]=rr*Math.sin(ph)*Math.cos(th);
+    pos[idx+1]=rr*Math.cos(ph);
+    pos[idx+2]=rr*Math.sin(ph)*Math.sin(th);
+    const c = 0.5+rng()*0.5;
+    col[idx]=c; col[idx+1]=c; col[idx+2]=c+rng()*0.1;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const mat = new THREE.PointsMaterial({ size:1.3, map:starTex, vertexColors:true, transparent:true, opacity:0.75, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true });
+  scene.add(new THREE.Points(geo, mat));
+})();
+
+let galaxyGroup = new THREE.Group();
+scene.add(galaxyGroup);
+let activeMainMat = null;
+
+function disposeGroup(g){
+  g.traverse(o=>{
+    if (o.geometry) o.geometry.dispose();
+    if (o.material){
+      if (Array.isArray(o.material)) o.material.forEach(m=>m.dispose());
+      else o.material.dispose();
+    }
+  });
+  while (g.children.length) g.remove(g.children[0]);
+}
+
+function currentParams(){
+  return {
+    seed: document.getElementById('seedInput').value || 'default',
+    arms: parseInt(document.getElementById('arms').value, 10),
+    tightness: parseFloat(document.getElementById('tightness').value),
+    bulge: parseFloat(document.getElementById('bulge').value),
+    radius: parseFloat(document.getElementById('radius').value),
+    count: parseInt(document.getElementById('count').value, 10),
+    palette: document.querySelector('#paletteRow button.active').dataset.p
+  };
+}
+
+function regenerate(){
+  const params = currentParams();
+  disposeGroup(galaxyGroup);
+  const { group, mainMat } = buildGalaxy(params);
+  galaxyGroup = group;
+  scene.add(galaxyGroup);
+  activeMainMat = mainMat;
+
+  document.getElementById('hudSeed').textContent = params.seed;
+  document.getElementById('hudStars').textContent = params.count.toLocaleString();
+  document.getElementById('hudArms').textContent = params.arms;
+
+  const dist = params.radius * 1.7;
+  controls.target.set(0,0,0);
+  if (!regenerate.hasFramed){
+    camera.position.set(dist*0.55, params.radius*0.85, dist*0.95);
+    regenerate.hasFramed = true;
+  }
+}
+
+// ---------- UI wiring ----------
+function bindSlider(id, labelId, fmt){
+  const el = document.getElementById(id);
+  const lab = document.getElementById(labelId);
+  const upd = () => { lab.textContent = fmt ? fmt(el.value) : el.value; };
+  el.addEventListener('input', upd);
+  upd();
+}
+bindSlider('arms','armsVal');
+bindSlider('tightness','tightVal', v=>parseFloat(v).toFixed(2));
+bindSlider('bulge','bulgeVal', v=>parseFloat(v).toFixed(2));
+bindSlider('radius','radiusVal', v=>parseFloat(v).toFixed(1));
+bindSlider('count','countVal', v=>parseInt(v,10).toLocaleString());
+
+['arms','tightness','bulge','radius','count'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', regenerate);
+});
+
+document.getElementById('diceBtn').addEventListener('click', ()=>{
+  document.getElementById('seedInput').value = Math.floor(rngGlobal()*900000+100000);
+  regenerate();
+});
+const rngGlobal = Math.random;
+
+document.getElementById('seedInput').addEventListener('keydown', e=>{
+  if (e.key === 'Enter') regenerate();
+});
+document.getElementById('regenBtn').addEventListener('click', regenerate);
+
+document.querySelectorAll('#paletteRow button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#paletteRow button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    regenerate();
+  });
+});
+
+const rotateToggle = document.getElementById('rotateToggle');
+rotateToggle.addEventListener('click', ()=>{
+  controls.autoRotate = !controls.autoRotate;
+  rotateToggle.classList.toggle('on', controls.autoRotate);
+});
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- animation loop ----------
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  if (activeMainMat) activeMainMat.uniforms.uTime.value = t;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+regenerate();
+animate();
+setTimeout(()=>{
+  const l = document.getElementById('loading');
+  l.style.opacity = '0';
+  setTimeout(()=>l.remove(), 500);
+}, 300);
+
+})();
+</script>
+</body>
+</html>
